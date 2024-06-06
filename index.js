@@ -5,39 +5,43 @@ const app = express();
 const bodyParser = require('body-parser');
 const { Pool } = require('pg');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
+require('dotenv').config();
 
 
-app.use(cors());
+app.use(cors({
+    origin: 'https://peperunner.xyz',
+    credentials: true
+}));
 app.use(bodyParser.json());
 
-const ACCESS_TOKEN_SECRET = process.env.ACCESS_TOKEN_SECRET;
-
-const jwt = require('jsonwebtoken');
-
-const authenticateToken = (req, res, next) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-    // Check if the token matches the stored secret
-    if (token !== ACCESS_TOKEN_SECRET) {
-        console.error('Token mismatch');
-        return res.status(403).json({ error: 'Forbidden' });
-    }
-
-    // If token is valid, proceed to the next middleware
-    next();
-};
-
-
-
-
-
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRATION = '1h';
 
 
 const connectionString = process.env.POSTGRES_PRISMA_URL 
-// Create a pool
 const pool = new Pool({
     connectionString: connectionString,
+});
+
+const authenticateToken = (req, res, next) => {
+    const token = req.cookies.token;
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Forbidden' });
+        req.user = user;
+        next();
+    });
+};
+
+app.post('/issue-token', (req, res) => {
+    const { username } = req.body; 
+    const payload = { username };
+
+    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
+    res.cookie('token', token, { httpOnly: true, secure: true });
+    res.json({ token });
 });
 
 
