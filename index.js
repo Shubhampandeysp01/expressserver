@@ -19,13 +19,25 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRATION = '1h';
 
 
-const connectionString = process.env.POSTGRES_PRISMA_URL 
+const connectionString = process.env.POSTGRES_PRISMA_URL ;
 const pool = new Pool({
     connectionString: connectionString,
 });
 
+const verifyOrigin = (req, res, next) => {
+    const allowedOrigin = 'https://peperunner.xyz';
+    const origin = req.headers.origin || req.headers.referer;
+
+    if (origin && origin.startsWith(allowedOrigin)) {
+        next();
+    } else {
+        res.status(403).json({ error: 'Forbidden' });
+    }
+};
+
 const authenticateToken = (req, res, next) => {
-    const token = req.cookies.token;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
     jwt.verify(token, JWT_SECRET, (err, user) => {
@@ -35,17 +47,16 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-app.post('/issue-token', (req, res) => {
-    const { username } = req.body; 
+app.post('/issue-token',verifyOrigin, (req, res) => {
+    const { username } = req.body;
     const payload = { username };
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRATION });
-    res.cookie('token', token, { httpOnly: true, secure: true });
     res.json({ token });
 });
 
 
-app.get('/leaderboard', authenticateToken, async (req, res) => {
+app.get('/leaderboard', [verifyOrigin, authenticateToken], async (req, res) => {
     try {
         
         const query = `
@@ -62,11 +73,19 @@ app.get('/leaderboard', authenticateToken, async (req, res) => {
     }
 });
 
-app.post('/update-leaderboard',authenticateToken, async (req, res) => {
+app.post('/update-leaderboard', [verifyOrigin, authenticateToken], async (req, res) => {
     try {
-        console.log("sjss");
-        console.log('Received request to update leaderboard:', req.body);
         const { wallet_address, score } = req.body;
+
+        if (!wallet_address || typeof wallet_address !== 'string') {
+            return res.status(400).json({ error: 'Invalid wallet address' });
+        }
+        if (wallet_address.includes(' ') || !/^[a-zA-Z0-9]+$/.test(wallet_address)) {
+            return res.status(400).json({ error: 'Wallet address must be alphanumeric and contain no spaces' });
+        }
+        if (wallet_address.length > 48) {
+            return res.status(400).json({ error: 'Wallet address must be less than or equal to 46 characters in length' });
+        }
 
         const query = `
             SELECT score FROM solana_wallets 
