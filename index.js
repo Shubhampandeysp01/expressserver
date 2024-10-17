@@ -10,7 +10,7 @@ require('dotenv').config();
 
 
 app.use(cors({
-    origin: 'https://peperunner.xyz',
+    origin: 'https://peperunner-wheat.vercel.app',
     credentials: true
 }));
 app.use(bodyParser.json());
